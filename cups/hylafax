@@ -1,0 +1,135 @@
+#!/usr/bin/perl
+use strict;
+
+# call format: hylafax <unused1> <user> <jobname> <unused2> <useropts> <faxname>
+# phone number:
+# - as a job name
+# - as option "-o phone=<number>"
+# - as file name
+sub nvl ($) { $_ = defined($_[0]) ? $_[0] : ''; s/^\s+//; s/\s+$//; return $_; }
+
+my $group = "faxlords";
+my $pattern = "fax";
+my $page = "a4";
+my $faxprog = "/usr/bin/sendfax";
+my $faxstat = "/usr/bin/faxstat";
+my $su = "sudo -u";
+my $defnum = "";
+my $printer = $ENV{PRINTER};
+my $jobname = nvl($ARGV[2]);
+my $log = "/var/log/cups/hylafax.log";
+# If we find six arguments, the last one is the fax name;
+# otherwise, it is empty and sendfax will read standard input.
+my $faxname = nvl($ARGV[5]);
+# Get the user that owns the job
+my $user = nvl($ARGV[1]);
+# Set some defaults
+my $res = "-m";		# Default resolution is high; set this to -l for low resolution
+my $number = "";	# Use option "phone" as number by default
+my $useropts = nvl($ARGV[4]);
+
+my $from = $user;
+if ($from !~ /\@/) {
+  my $host = nvl(`hostname 2>/dev/null`);
+  if ($host =~ /\./) {
+    $host =~ s/^[^\.]+\.//;
+    $from .= '@'.$host;
+  }
+}
+
+# Called with no arguments, we list the provided HylaFAX backend
+
+if ($#ARGV < 0) {
+  print 'direct hylafax:/local "Unknown" "Local HylaFAX server"'."\n";
+  exit 0;
+}
+
+open (LOG, ">>", $log);
+my $now = `date 2>/dev/null`;
+chop $now;
+print LOG "===== $now =====\n";
+print LOG "args: ",join(',', map("'$_'",@ARGV)),"\n";
+
+sub print2 {
+  print STDERR join('',@_);
+  print LOG join('',@_);
+}
+
+# Apparently the first character emitted is somehow "eaten" by the reader
+print STDERR "\n";
+
+open(LPOPTS, "/usr/bin/lptoptions -p $printer 2>/dev/null |");
+while(<LPTOPS>) {
+  next unless /^([^\/]+)\/[^:]+:[^\*]+\*(\S+)/;
+  my ($opt, $val) = ($1, $2);
+  $page = lc($val) if $opt eq "PageSize";
+  $res = "-l" if $opt eq "Resolution" && $val eq "204x98dpi";
+  $number = "-m" if $opt eq "Dial" && $val eq "Manually";
+  $number = "-j" if $opt eq "Dial" && $val eq "JobName";
+}
+close(LPOPTS);
+
+# Scan user options and set -l/-m (override previous choices if necessary)
+for my $opt (split $useropts) {
+  $res = "-l" if $opt =~ /^lowres/;
+  $res = "" if $opt =~ /^hires/;
+  $number = "-m" if $opt =~ /^manual/;
+  $number = $jobname if $opt =~ /^jobname/;
+  $number = $1 if $opt =~ /^phone=(\S+)/;
+  $page = lc($1) if $opt =~ /^media=(\S+)/;
+}
+
+# do some checking before continuing
+my $running = `$faxstat -s 2>/dev/null | grep HylaFAX | grep Running`;
+
+sub tonum ($) { $_ = nvl($_[0]); s/\s+/./; s/[^0-9\+\-]//g; return $_; }
+
+$number = tonum($jobname) if $number eq "-j";
+$number = tonum($1) if (!$number) && ($jobname =~ /$pattern(\+?\d[\d\-]{2,20})/);
+$number = tonum($1) if (!$number) && ($jobname =~ /^(\+?\d[\d\-]{2,20})(\..*)?$/);
+$number = tonum($1) if (!$number) && ($faxname =~ /$pattern(\+\d[\d\-]{2,20})/);
+$number = tonum($1) if (!$number) && ($faxname =~ /^(\+?\d[\d\-]{2,20})(\..*)?$/);
+$number = tonum($1) if (!$number) && ($defnum =~ /(\d+)/);
+print2 "jobn=".tonum($jobname)." faxn=".tonum($faxname)."\n";
+
+unless ($number) {
+  print2 "ERROR: undefined phone number\n";
+  # Raise error but do not hang the queue
+  exit 0;
+}
+unless (-x $faxprog) {
+  print2 "ERROR: $faxprog: executable not found\n";
+  # Raise error and hang the queue: this is fatal !
+  exit 1;
+}
+unless ($running) {
+  print2 "ERROR: hylafax not running\n";
+  # Raise error and hang the queue: this is fatal !
+  exit 2;
+}
+
+# check access permissions
+my ($grname, $grpass, $grgid, $grmembers) = getgrnam($group);
+if (nvl($grmembers) ne '') {
+  my $permit = 1;
+  for (split /,/, $grmembers) { $permit = 1 if $_ eq $user }
+  unless ($permit) {
+    print2 "ERROR: user '$user' is not permitted to send faxes\n";
+    exit 3;
+  }
+}
+
+# Use sudo to make sure that job is owned by the user that wants to "print",
+# not root. This is needed so that the owner of the job can remove it if needed.
+$faxname = "'".$faxname."'" if $faxname =~ /\s/;
+my $opts = "-o $user -s $page $res -n -f $from -d $number $faxname";
+my $cmd = "$su $user $faxprog $opts";
+print LOG "cmd: $cmd\n";
+system("$cmd >> $log 2>&1");
+my $rc = $? >> 8;
+if ($rc == 0) {
+  print2 "INFO: fax sent successfully\n";
+} else {
+  print2 "ERROR: sendfax failed, return code $rc\n";
+}
+exit $rc;
