@@ -1,0 +1,11 @@
+#!/bin/sh
+exec >> /etc/my/log/backup-zip.log 2>&1
+echo "+ BUGZILLA `date` ..."
+cd /
+ZIP=/var/ext/ext1/zip/bugzilla.tgz
+mv -f ${ZIP} ${ZIP}.bak
+/usr/bin/mysqldump -ubugs -pbugs bugs | gzip -c > ${ZIP}
+chmod 600 ${ZIP}
+rm -f ${ZIP}.bak
+echo "- BUGZILLA `date` ."
+echo "."

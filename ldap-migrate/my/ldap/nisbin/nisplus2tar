@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# the resulting tarball will be put here
+TARGET=/home/tr10_3/avex1/nisplus
+# tarball name
+NAME="vitanis"
+
+NISCAT=/bin/niscat
+NISADDENT=/usr/lib/nis/nisaddent
+TAR="${WD}/${NAME}.tar"
+DIR="/tmp/${NAME}"
+WD=`pwd`
+rm -fr $DIR
+mkdir -p $DIR
+
+ETC_PASSWD="$DIR/passwd.ldap"
+ETC_SHADOW="$DIR/shadow.ldap"
+ETC_GROUP="$DIR/group.ldap"
+ETC_SERVICES="$DIR/services.ldap"
+ETC_PROTOCOLS="$DIR/protocols.ldap"
+ETC_FSTAB="$DIR/fstab.ldap"
+ETC_RPC="$DIR/rpc.ldap"
+ETC_HOSTS="$DIR/hosts.ldap"
+ETC_NETWORKS="$DIR/networks.ldap"
+ETC_NETGROUP="$DIR/netgroup.ldap"
+ETC_ALIASES="$DIR/aliases.ldap"
+
+DOM="`domainname`."
+
+$NISADDENT -d passwd $DOM > $ETC_PASSWD
+$NISADDENT -d shadow $DOM > $ETC_SHADOW
+$NISADDENT -d group $DOM > $ETC_GROUP
+$NISADDENT -d services $DOM > $ETC_SERVICES
+$NISADDENT -d protocols $DOM > $ETC_PROTOCOLS
+touch $ETC_FSTAB
+$NISADDENT -d rpc $DOM > $ETC_RPC
+$NISADDENT -d hosts $DOM > $ETC_HOSTS
+$NISADDENT -d networks $DOM > $ETC_NETWORKS
+$NISADDENT -d netgroup $DOM > $ETC_NETGROUP
+$NISCAT mail_aliases.org_dir.$DOM > $ETC_ALIASES
+
+cd $DIR/..
+tar cf ${TAR} $NAME
+cd $WD
+rm -fr $DIR
+chown root:root $TAR
+chmod 600 $TAR
+
+[ -d $TARGET -a -w $TARGET ] && mv -f $TAR $TARGET || echo "cannot write to $TARGET"
+

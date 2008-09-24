@@ -1,0 +1,12 @@
+#!/bin/sh
+exec >> /etc/my/log/backup-zip.log 2>&1
+echo "+ IMAP `date` ..."
+ZIP=/var/ext/ext1/zip/imap.tgz
+LIST="etc/imapd.conf etc/cyrus.conf etc/mail root/.fetchmailrc root/.fetchids var/imap var/spool/imap"
+mv -f ${ZIP} ${ZIP}.bak
+cd /
+tar czf ${ZIP} ${LIST}
+chmod 600 ${ZIP}
+rm -f ${ZIP}.bak
+echo "- IMAP `date` ."
+echo "."

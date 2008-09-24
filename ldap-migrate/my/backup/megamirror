@@ -1,0 +1,41 @@
+#!/bin/sh
+LOCS="/opt1/home/rtboot"
+
+RHOST=tornado10
+RUSER=r7rtboot
+RHOME=/export/home3/r7rtboot
+
+exec >> /etc/my/megamirror.log 2>&1 
+
+DBG=""
+TMP="/tmp"
+RCRED="${RUSER}@${RHOST}"
+echo "+++ `date` +++ start backup"
+for LOC in ${LOCS}; do
+  NAME=`basename $LOC`
+  PREV=${NAME}.prev
+  PID="-pid$$"
+  PID=""
+  TAR="${NAME}${PID}.tgz"
+  PWD=`pwd`
+  cd ${LOC}
+  cd ..
+  /bin/tar czf ${TMP}/${TAR} ${NAME}
+  cd ${PWD}
+  echo "  +++ `date` +++ ${LOC} "
+  echo -n "  1 "
+  /usr/bin/ssh ${DBG}  ${RCRED} /bin/rm -f ${RHOME}/${TAR}
+  echo -n "  2 "
+  /usr/bin/scp ${DBG} -qB ${TMP}/${TAR} ${RCRED}:${RHOME}
+  echo -n "  3 "
+  /usr/bin/ssh ${DBG}  ${RCRED} \
+      "cd ${RHOME} && rm -rf ${NAME} && gtar xzf ${TAR}"
+  echo -n "  4 "
+  /usr/bin/ssh ${DBG}  ${RCRED} "cd ${RHOME} && rm -f ${TAR}"
+  /bin/rm -f ${TMP}/${TAR}
+  echo "  . "
+  echo "  --- `date` --- ${LOC}"
+done
+echo "--- `date`  --- end backup"
+echo "."
+

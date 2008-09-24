@@ -1,0 +1,14 @@
+dn: o=gclimate
+objectClass: organization
+objectClass: top
+o: gclimate
+
+dn: ou=services,o=gclimate
+objectClass: organizationalUnit
+objectClass: top
+ou: services
+
+dn: cn=admin,ou=services,o=gclimate
+objectClass: organizationalRole
+objectClass: top
+cn: admin

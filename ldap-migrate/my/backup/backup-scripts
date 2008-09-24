@@ -1,0 +1,11 @@
+#!/bin/sh
+exec >> /etc/my/log/backup-zip.log 2>&1
+echo "+ SCRIPTS `date` ..."
+cd /
+ZIP=/var/ext/ext1/zip/scripts.tgz
+mv -f ${ZIP} ${ZIP}.bak
+tar czf ${ZIP} etc/my > /dev/null 2>&1
+chmod 600 ${ZIP}
+rm -f ${ZIP}.bak
+echo "- SCRIPTS `date` ."
+echo "."

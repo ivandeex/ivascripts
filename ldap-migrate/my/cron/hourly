@@ -1,0 +1,5 @@
+#!/bin/sh
+# put your commands here...
+/etc/my/backup/backup-imap
+/etc/my/backup/backup-bugzilla
+/etc/my/backup/backup-scripts

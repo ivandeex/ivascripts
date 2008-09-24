@@ -1,0 +1,76 @@
+#!/bin/bash
+#
+# cyrus		This shell script takes care of starting and stopping
+#		the cyrus-master subsystem 
+#
+# chkconfig: 345 81 29
+# description:	Cyrus IMAP and POP server
+# processname: cyrus-,aster
+# config: /etc/cyrus.conf
+# pidfile: /var/run/mysqld/mysqld.pid
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+
+prog="cyrus-master"
+
+start(){
+	/usr/cyrus/bin/cyrus-master >/dev/null 2>&1 &
+	ret=$?
+	if [ $ret -eq 0 ]; then
+	    action $"Starting $prog: " /bin/true
+	else
+    	    action $"Starting $prog: " /bin/false
+	fi
+	[ $ret -eq 0 ] && touch /var/lock/subsys/cyrus-master
+	return $ret
+}
+
+stop(){
+        /bin/kill `cat /var/run/cyrus-master.pid  2> /dev/null ` > /dev/null 2>&1
+	ret=$?
+	if [ $ret -eq 0 ]; then
+	    action $"Stopping $prog: " /bin/true
+	else
+    	    action $"Stopping $prog: " /bin/false
+	fi
+	[ $ret -eq 0 ] && rm -f /var/lock/subsys/cyrus-master
+	return $ret
+}
+ 
+restart(){
+    stop
+    start
+}
+
+condrestart(){
+    [ -e /var/lock/subsys/cyrus-master ] && restart || :
+}
+
+# See how we were called.
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  status)
+    status cyrus-master
+    ;;
+  restart)
+    restart
+    ;;
+  condrestart)
+    condrestart
+    ;;
+  *)
+    echo $"Usage: $0 {start|stop|status|condrestart|restart}"
+    exit 1
+esac
+
+exit $?
