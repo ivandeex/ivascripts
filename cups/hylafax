@@ -1,107 +1,191 @@
 #!/usr/bin/perl
+#
+# HylaFAX back-end for CUPS
+# Copyright (C) 2008, Victor Semizarov <vsemizarov@gmail.com>
+#
+# based on fax4CUPS 1.23, a fax back-end for CUPS:
+#     Copyright (C) 2001-2003 Sebastiano Vigna <vigna@acm.org>
+#          Modified by Michael Goffioul <goffioul@imec.be>
+#          Modified by Arnold Moene <a.f.moene@eduphys.xs4all.nl>
+#          Additional fixes by Kevin Ivory <Ivory@SerNet.de>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+# for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+# run by CUPS daemon as:
+#   hylafax-backend <jobid> <user> <jobname> <jobopts> <useropts> <faxname>
+#
+# device uri:
+#    hylafax://hylafax.server.name[?option1=value1[,option2=value2]]...
+#
+# setting hylafax server name to "local" means using a default server
+#
+# how fax telephone number is extracted:
+#  (1) from the "-o phone=<number>" lpd option
+#  (2) from job name if "*Dial: JobName" is set in PPD
+#  (3) from job name if it matches "...faxNNNNNN..."
+#  (4) from job name if it matches "NNNNN"
+#  (5) from input file name if it matches "...faxNNN..."
+#  (6) from input file name if it matches "NNNNN.ext"
+#  (7) from the "defnum" device uri option "?defnum=NNNNN"
+#
+
 use strict;
 
-# call format: hylafax <unused1> <user> <jobname> <unused2> <useropts> <faxname>
-# phone number:
-# - as a job name
-# - as option "-o phone=<number>"
-# - as file name
-sub nvl ($) { $_ = defined($_[0]) ? $_[0] : ''; s/^\s+//; s/\s+$//; return $_; }
+sub nvl ($) { $_ = defined($_[0]) ? $_[0] : ''; s/^\s+//; s/\s+$//; $_; }
+sub env ($) { return nvl($ENV{$_[0]}) }
+sub arg ($) { return nvl($ARGV[$_[0]]) }
+sub tonum ($) { $_ = nvl($_[0]); s/\s+/./; s/[^0-9\+\-]//g; $_; }
 
-my $group = "faxlords";
-my $pattern = "fax";
-my $page = "a4";
 my $faxprog = "/usr/bin/sendfax";
 my $faxstat = "/usr/bin/faxstat";
 my $su = "sudo -u";
-my $defnum = "";
-my $printer = $ENV{PRINTER};
-my $jobname = nvl($ARGV[2]);
 my $log = "/var/log/cups/hylafax.log";
-# If we find six arguments, the last one is the fax name;
+
+# set some defaults
+my %opt;
+$opt{group} = "faxlords";
+$opt{debug} = 0;
+$opt{page} = "a4";
+$opt{pattern} = "fax";
+$opt{allnums} = 1;
+$opt{defnum} = "";
+$opt{server} = "";
+$opt{res} = "medium";
+$opt{domain} = "";
+
+# number to call to
+my $number = "";	# use option "phone" as number by default
+
+# get arguments
+my $user = arg(1);	# the user that owns the job
+my $useropts = arg(4);
+my $jobopts = arg(3);
+my $jobid = arg(0);
+my $jobname = arg(2);
+# if we find six arguments, the last one is the fax name;
 # otherwise, it is empty and sendfax will read standard input.
-my $faxname = nvl($ARGV[5]);
-# Get the user that owns the job
-my $user = nvl($ARGV[1]);
-# Set some defaults
-my $res = "-m";		# Default resolution is high; set this to -l for low resolution
-my $number = "";	# Use option "phone" as number by default
-my $useropts = nvl($ARGV[4]);
+my $faxname = arg(5);
 
-my $from = $user;
-if ($from !~ /\@/) {
-  my $host = nvl(`hostname 2>/dev/null`);
-  if ($host =~ /\./) {
-    $host =~ s/^[^\.]+\.//;
-    $from .= '@'.$host;
-  }
-}
+# get environment
+my $printer = env('PRINTER');
+my $uri = env('DEVICE_URI');
+my $charset = env('CHARSET');
+my $mime = env('CONTENT_TYPE');
+my $ppd = env('PPD');
+my $lang = env('LANG');
 
-# Called with no arguments, we list the provided HylaFAX backend
-
+# called without arguments, we list the provided hylafax backend
 if ($#ARGV < 0) {
-  print 'direct hylafax:/local "Unknown" "Local HylaFAX server"'."\n";
+  print 'direct hylafax:/local "unknown" "local hylafax server"'."\n";
   exit 0;
 }
 
+# apparently the first character emitted is somehow "eaten" by the reader
+print STDERR "\n";
+
+# open log file
 open (LOG, ">>", $log);
-my $now = `date 2>/dev/null`;
+my $now = `env LANG=C date 2>/dev/null`;
 chop $now;
 print LOG "===== $now =====\n";
-print LOG "args: ",join(',', map("'$_'",@ARGV)),"\n";
+print LOG "args: ",join(',', map("'$_'",@ARGV)),"\n"
+  if $opt{debug};
 
 sub print2 {
   print STDERR join('',@_);
   print LOG join('',@_);
 }
 
-# Apparently the first character emitted is somehow "eaten" by the reader
-print STDERR "\n";
+if ($opt{debug} > 1) {
+  for (sort keys %ENV) { print LOG "env: $_ = $ENV{$_}\n" }
+}
 
+# parse device URI
+my @uriopts = ();
+if ( $uri =~ /^(?:\w+\:\/{1,2})?([\w\-\._]+(?:\:\d+)?)(?:\?(.*))?$/ ) {
+  $opt{server} = $1 if $1 !~ /^local\w*$/;
+  @uriopts = split /[\&,]+/, $2 if $2;
+}
+
+print LOG "uri='$uri' server='$opt{server}' "
+          ."uriopts=(".join(',',map("'$_'",@uriopts)),")\n"
+  if $opt{debug};
+
+for (@uriopts) {
+  next unless /^(.*?)=(.*)$/;
+  my ($name, $val) = ($1, $2);
+  $opt{nvl($name)} = nvl($val);
+}
+
+# scan lpoptions
 open(LPOPTS, "/usr/bin/lptoptions -p $printer 2>/dev/null |");
 while(<LPTOPS>) {
   next unless /^([^\/]+)\/[^:]+:[^\*]+\*(\S+)/;
-  my ($opt, $val) = ($1, $2);
-  $page = lc($val) if $opt eq "PageSize";
-  $res = "-l" if $opt eq "Resolution" && $val eq "204x98dpi";
-  $number = "-m" if $opt eq "Dial" && $val eq "Manually";
-  $number = "-j" if $opt eq "Dial" && $val eq "JobName";
+  my ($name, $val) = ($1, $2);
+  $opt{page} = lc($val) if $name eq "PageSize";
+  $opt{res} = "low" if $name eq "Resolution" && $val eq "204x98dpi";
+  $number = "-m" if $name eq "Dial" && $val eq "Manually";
+  $number = "-j" if $name eq "Dial" && $val eq "JobName";
 }
 close(LPOPTS);
 
-# Scan user options and set -l/-m (override previous choices if necessary)
-for my $opt (split $useropts) {
-  $res = "-l" if $opt =~ /^lowres/;
-  $res = "" if $opt =~ /^hires/;
-  $number = "-m" if $opt =~ /^manual/;
-  $number = $jobname if $opt =~ /^jobname/;
-  $number = $1 if $opt =~ /^phone=(\S+)/;
-  $page = lc($1) if $opt =~ /^media=(\S+)/;
+# scan user options and set resolution (override previous choices if necessary)
+for my $uopt (split $useropts) {
+  $opt{res} = "low" if $uopt =~ /^lowres/;
+  $opt{res} = "high" if $uopt =~ /^hires/;
+  $number = "-m" if $uopt =~ /^manual/;
+  $number = $jobname if $uopt =~ /^jobname/;
+  $number = $1 if $uopt =~ /^phone=(\S+)/;
+  $opt{page} = lc($1) if $uopt =~ /^media=(\S+)/;
 }
 
-# do some checking before continuing
-my $running = `$faxstat -s 2>/dev/null | grep HylaFAX | grep Running`;
-
-sub tonum ($) { $_ = nvl($_[0]); s/\s+/./; s/[^0-9\+\-]//g; return $_; }
-
-$number = tonum($jobname) if $number eq "-j";
-$number = tonum($1) if (!$number) && ($jobname =~ /$pattern(\+?\d[\d\-]{2,20})/);
-$number = tonum($1) if (!$number) && ($jobname =~ /^(\+?\d[\d\-]{2,20})(\..*)?$/);
-$number = tonum($1) if (!$number) && ($faxname =~ /$pattern(\+\d[\d\-]{2,20})/);
-$number = tonum($1) if (!$number) && ($faxname =~ /^(\+?\d[\d\-]{2,20})(\..*)?$/);
-$number = tonum($1) if (!$number) && ($defnum =~ /(\d+)/);
-print2 "jobn=".tonum($jobname)." faxn=".tonum($faxname)."\n";
+# extract telephone number
+my $pattern = nvl($opt{pattern});
+my $allnums = nvl($opt{allnums});
+$number = tonum($jobname)
+  if $number eq "-j";
+$number = tonum($1)
+  if (!$number) && $pattern && ($jobname =~ /$pattern(\+?\d[\d\- \(\)]{2,20})/);
+$number = tonum($1)
+  if (!$number) && $pattern && ($faxname =~ /$pattern(\+\d[\d\- \(\)]{2,20})/);
+$number = tonum($1)
+  if (!$number) && $allnums && ($jobname =~ /^(\+?\d[\d\- \(\)]{2,20})(\..*)?$/);
+$number = tonum($1)
+  if (!$number) && $allnums && ($faxname =~ /^(\+?\d[\d\- \(\)]{2,20})(\..*)?$/);
+$number = tonum($1)
+  if (!$number) && ($opt{defnum} =~ /([\d\-\+ \(\)]+)/);
+print LOG "number=$number jobn=".tonum($jobname)." faxn=".tonum($faxname)."\n"
+  if $opt{debug};
 
 unless ($number) {
+$opt{defnum} = "";
   print2 "ERROR: undefined phone number\n";
   # Raise error but do not hang the queue
   exit 0;
 }
+
+# check the fax executable is present
 unless (-x $faxprog) {
   print2 "ERROR: $faxprog: executable not found\n";
   # Raise error and hang the queue: this is fatal !
   exit 1;
 }
+
+# check that hylafax server is running
+my $server = $opt{server} ? "-h $opt{server}" : "";
+my $running = `$faxstat $server -s 2>/dev/null | grep HylaFAX | grep Running`;
 unless ($running) {
   print2 "ERROR: hylafax not running\n";
   # Raise error and hang the queue: this is fatal !
@@ -109,7 +193,7 @@ unless ($running) {
 }
 
 # check access permissions
-my ($grname, $grpass, $grgid, $grmembers) = getgrnam($group);
+my ($grname, $grpass, $grgid, $grmembers) = getgrnam(nvl($opt{group}));
 if (nvl($grmembers) ne '') {
   my $permit = 1;
   for (split /,/, $grmembers) { $permit = 1 if $_ eq $user }
@@ -119,17 +203,42 @@ if (nvl($grmembers) ne '') {
   }
 }
 
-# Use sudo to make sure that job is owned by the user that wants to "print",
-# not root. This is needed so that the owner of the job can remove it if needed.
+# set "from" field
+my $from = $user;
+if ($from !~ /\@/) {
+  my $domain = nvl($opt{domain});
+  unless ($domain) {
+    my $host = nvl(`hostname 2>/dev/null`);
+    if ($host =~ /\./) {
+      ($domain = $host) =~ s/^[^\.]+\.//;
+    }
+  }
+  $from .= '@'.$domain if $domain;
+}
+
+# set resolution
+my $res = ""; # default is high resolution
+$res = "-m" if $opt{res} =~ /^med/i;
+$res = "-l" if $opt{res} =~ /^low/i;
+
+# set program parameters
 $faxname = "'".$faxname."'" if $faxname =~ /\s/;
-my $opts = "-o $user -s $page $res -n -f $from -d $number $faxname";
+
+my $opts = "-o $user -s $opt{page} $res -n -f $from -d $number $server $faxname";
+# use sudo to make sure that job is owned by the user that wants to "print",
+# not root. this is needed so that the owner of the job can remove it if needed.
 my $cmd = "$su $user $faxprog $opts";
-print LOG "cmd: $cmd\n";
+
+# send the fax
+print LOG "cmd: $cmd\n"
+  if $opt{debug};
 system("$cmd >> $log 2>&1");
 my $rc = $? >> 8;
+print LOG "fax $jobname/$faxname to $number\n";
 if ($rc == 0) {
   print2 "INFO: fax sent successfully\n";
 } else {
   print2 "ERROR: sendfax failed, return code $rc\n";
 }
 exit $rc;
+

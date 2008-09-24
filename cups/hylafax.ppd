@@ -5,7 +5,7 @@
 *LanguageEncoding: ISOLatin1
 *PCFileName:	"HYLAFAX.PPD"
 *Manufacturer:	"HylaFAX"
-*Product:	"HylaFAX"
+*Product:	"(HylaFAX)"
 *cupsFax:	True
 *cupsFilter:	"application/vnd.cups-postscript 0 -"
 *cupsVersion:	1.1
@@ -44,6 +44,9 @@
 *PageRegion Legal/US Legal:	"<</PageSize[612 1008]/ImagingBBox null>>setpagedevice"
 
 *DefaultImageableArea: A4
+*ImageableArea A4/A4: "0 0 595 842"
+*ImageableArea Legal/US Legal: "0 0 612 1008"
+*ImageableArea Letter/US Letter: "0 0 612 792"
 
 *DefaultPaperDimension: A4
 *PaperDimension A4: "595 842"
