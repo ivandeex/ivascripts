@@ -21,13 +21,13 @@ my $cleanup = 1;
 my (%vhosts, @vhosts, @logs, @suffixes, %fds, %warn_vhost);
 my ($vhost, $alias, $log, $log0, $fd, $suffix, $outlog);
 
+if ($#ARGV >= 0 && $ARGV[0] eq "-v") {
+  $debug = 1;
+  $quiet = 0;
+}
+
 $webal_opts .= " -d" if $debug;
 $webal_opts .= " -Q" if $quiet;
-
-@suffixes = ( "" );
-if ($use_history) {
-  @suffixes = qw(.9 .8 .7 .6 .5 .4 .3 .2 .1),"";
-}
 
 sub noquot ($) {
   $_ = $_[0];
@@ -228,15 +228,23 @@ EOF
   close GLOBAL;
 }
 
-
 for $vhost (@vhosts) {
   $outlog = "$usage_root/$vhost/stage/access_log";
   truncate $outlog, 0;
 }
 
-for $log0 (@logs) {
-  for $suffix (@suffixes) {
-    $log = "$log0$suffix";
+if ($use_history) {
+  my @tmp = @logs;
+  @logs = ();
+  for $log (@tmp) {
+    push @logs, split(/\s*[\r\n]+\s*/, `ls -1rt \"$log\"* 2>/dev/null`);
+  }
+  print "all logs: ".join(',',@logs)."\n"
+    if $debug;
+}
+
+
+for $log (@logs) {
     open(LOG, "<", $log) or next;
     print "READ $log\n" if $debug;
     while (<LOG>) {
@@ -260,8 +268,10 @@ for $log0 (@logs) {
       print $fd $_ if $fd ne "-";
     }
     close LOG;
-  }
-  for $fd (values %fds) { close($fd) if $fd ne "-" }
+}
+
+for $fd (values %fds) {
+  close($fd) if $fd ne "-"
 }
 
 for $vhost (@vhosts) {
