@@ -313,19 +313,6 @@ error_reporting(E_ALL);
 			$issue->whiteboard              = $row['whiteboard'];
 			$issue->url               	= $row['url'];
 
-			if (! array_key_exists($issue->bug_severity, $issueTrackers)) {
-				die("Cannot map bug severity '" . $issue->bug_severity
-					. "' for bug " . $issue->id . "\n");
-			}
-			if (! array_key_exists($issue->bug_status, $issueStatus)) {
-				die("Cannot map bug status '" . $issue->bug_status
-					. "' for bug " . $issue->id . "\n");
-			}
-			if (! array_key_exists($issue->bug_priority, $issuePriorities)) {
-				die("Cannot map bug priority '" . $issue->bug_priority
-					. "' for bug " . $issue->id . "\n");
-			}
-
 			$sql2 = "SELECT * FROM bug_group_map WHERE bug_id = " . $row['bug_id']
 				. " AND (group_id = 14 OR group_id = 21)";
 			$result2 = mysql_query($sql2) or die(mysql_error().$sql2);
@@ -520,8 +507,23 @@ error_reporting(E_ALL);
 	// Finalize remaining mappings for issues
 
 	foreach ($issues as $key => $issue) {
+
+		if (! array_key_exists($issue->bug_severity, $issueTrackers)) {
+			die("Cannot map bug severity '" . $issue->bug_severity
+				. "' for bug " . $issue->id . "\n");
+		}
 		$issue->tracker_id = $issueTrackers[$issue->bug_severity];
+
+		if (! array_key_exists($issue->bug_status, $issueStatus)) {
+			die("Cannot map bug status '" . $issue->bug_status
+				. "' for bug " . $issue->id . "\n");
+		}
 		$issue->status_id = $issueStatus[$issue->bug_status];
+
+		if (! array_key_exists($issue->bug_priority, $issuePriorities)) {
+			die("Cannot map bug priority '" . $issue->bug_priority
+				. "' for bug " . $issue->id . "\n");
+		}
 		$issue->priority_id = $issuePriorities[$issue->bug_priority];
 	}
 
