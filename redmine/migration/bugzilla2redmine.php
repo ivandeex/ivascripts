@@ -95,6 +95,9 @@ error_reporting(E_ALL);
 			"CLOSED"	=> "Closed"
 			);
 
+	// More settings
+	$defaultDueDate = "2012-01-01";
+
 	$adminLoginPattern = "/^victor.semizarov@/";
 
 	$migrateAttachmentContents = false;
@@ -291,6 +294,8 @@ error_reporting(E_ALL);
 			$duedate = NULL;
 			if ($row['deadline'] != NULL && $row['deadline'] != "") 
 				$duedate = date("Y-m-d",strtotime($row['deadline']));
+			elseif ($defaultDueDate != NULL && $defaultDueDate != "")
+				$duedate = date("Y-m-d",strtotime($defaultDueDate));
 
 			$issue = new stdClass();
 			$issue->id			= $row['bug_id'];
