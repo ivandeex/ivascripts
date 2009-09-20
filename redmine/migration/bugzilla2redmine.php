@@ -60,21 +60,22 @@ error_reporting(E_ALL);
 	$enableBoards = true;
 
 	// Bugzilla priority to Redmine priority map
-	$issuePriorities = array(
-				"Utmost" => 7,
-				"High" => 6,
-				"Medium" => 4,
-				"Low" => 3,
-				"Optional" => 2);
+	$issuePriorities = array("Utmost"	=> 7,
+				"High"		=> 6,
+				"Medium"	=> 4,
+				"Low"		=> 3,
+				"Optional"	=> 2);
 
 	// Bugzilla severity to Redmine tracker map
-	$issueTrackers = array(	"blocker"     => 1,
-				"critical"    => 1,
-				"major"       => 1,
-				"normal"      => 1,
-				"minor"       => 1,
-				"trivial"     => 1,
-				"enhancement" => 2);
+	$useTrackerCritical = true;
+	$useTrackerSupport = true;
+	$issueTrackers = array(	"blocker"     => "Critical",
+				"critical"    => "Critical",
+				"major"       => "Bug",
+				"normal"      => "Bug",
+				"minor"       => "Bug",
+				"trivial"     => "Support",
+				"enhancement" => "Feature");
 
 	// Bugzilla status to Redmine status map
         $issueStatus = array(	"UNCONFIRMED"   => 1,
@@ -85,7 +86,7 @@ error_reporting(E_ALL);
 				"VERIFIED"      => 2,
 				"CLOSED"        => 5);
 
-	$adminLoginPattern = "/^root@/";
+	$adminLoginPattern = "/^victor.semizarov@/";
 
 	$migrateAttachmentContents = false;
 
@@ -283,10 +284,15 @@ error_reporting(E_ALL);
 			$issue->priority_id		= $issuePriorities[$row['priority']];
                         $issue->fixed_version_id        = $versionNames[$row['product_id']][$row['version']];
 			$issue->category_id		= $row['component_id'];
-			$issue->tracker_id		= $issueTrackers[$row['bug_severity']];
+			$issue->bug_severity		= $row['bug_severity'];
 			$issue->status_id		= $issueStatus[$row['bug_status']];
                         $issue->whiteboard              = $row['whiteboard'];
                         $issue->url               	= $row['url'];
+
+			if (! array_key_exists($issue->bug_severity, $issueTrackers)) {
+				die("Cannot map bug severity '" . $issue->bug_severity
+					. "' for bug " . $issue->id . "\n");
+			}
 
 			$sql2 = "SELECT * FROM bug_group_map WHERE bug_id = " . $row['bug_id']
 				. " AND (group_id = 14 OR group_id = 21)";
@@ -426,6 +432,30 @@ error_reporting(E_ALL);
         $db_selected = mysql_select_db($redmineDBName, $link);
         if (!$db_selected) die ('Can\'t use ($redmineDBName : ' . mysql_error());
 
+	// Map bug severity to issue tracker
+	$trackerIds = array();
+
+	foreach ($issueTrackers as $bug_severity => $tracker_name) {
+		// Fix tracker names
+		if ($tracker_name == "Support" && ! $useTrackerSupport)
+			$tracker_name = "Bug";
+		if ($tracker_name == "Critical" && ! $useTrackerCritical)
+			$tracker_name = "Bug";
+		$sql = "SELECT id FROM trackers WHERE name = '" . $tracker_name ."'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		if ($row = mysql_fetch_array($result)) {
+			$tracker_id = $row['id'];
+		} else {
+			die("Cannot find tracker '" . $tracker_name . "'\n");
+		}
+		$trackerIds[$tracker_id] = $tracker_id;
+		$issueTrackers[$bug_severity] = $tracker_id;
+	}
+
+	foreach ($issues as $key => $issue) {
+		$issue->tracker_id = $issueTrackers[$issue->bug_severity];
+	}
+
 	// Create Redmine Project from Bugzilla Product
 	echo "Emptying Project tables.\n";
 	
@@ -486,11 +516,10 @@ error_reporting(E_ALL);
 	foreach ($projects as $key => $project) {
 		$continue = true;
 
-		$sql = "SELECT * FROM projects
-			WHERE id = " . $project->id;
-
-		$result = mysql_query($sql) or die(mysql_error().$sql);	
-		if ($row = mysql_fetch_array($result)) $continue = false;
+		$sql = "SELECT * FROM projects WHERE id = " . $project->id;
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		if ($row = mysql_fetch_array($result))
+			$continue = false;
 
 		if ($continue) {	
 			$identifier = strtolower($project->name);
@@ -520,12 +549,11 @@ error_reporting(E_ALL);
 					
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 
-			$sql = "INSERT INTO projects_trackers (project_id, tracker_id) VALUES (" . $project->id . ", 1)";
-			$result = mysql_query($sql) or die(mysql_error().$sql);
-			$sql = "INSERT INTO projects_trackers (project_id, tracker_id) VALUES (" . $project->id . ", 2)";
-			$result = mysql_query($sql) or die(mysql_error().$sql);
-			$sql = "INSERT INTO projects_trackers (project_id, tracker_id) VALUES (" . $project->id . ", 4)";
-			$result = mysql_query($sql) or die(mysql_error().$sql);
+			foreach ($trackerIds as $key => $tracker_id) {
+				$sql = "INSERT INTO projects_trackers (project_id, tracker_id)
+					VALUES (" . $project->id . ", " . $tracker_id . ")";
+				$result = mysql_query($sql) or die(mysql_error().$sql);
+			}
 
 			if ($enableIssueTracking) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES ("
@@ -620,7 +648,7 @@ error_reporting(E_ALL);
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
 	echo count($users) . " Users to import.\n";
-	foreach ($users as $key=>$user) {
+	foreach ($users as $key => $user) {
 		$continue = true;
 
 		$sql = "SELECT * FROM users WHERE id = " . $user->id;
@@ -674,7 +702,7 @@ error_reporting(E_ALL);
         $result = mysql_query($sql) or die(mysql_error().$sql);
 
 	echo count($issues) . " Issues to import.\n";
-	foreach ($issues as $key=>$issue) {
+	foreach ($issues as $key => $issue) {
 		$continue = true;
 
 		$sql = "SELECT * FROM issues WHERE id = " . $issue->id;
