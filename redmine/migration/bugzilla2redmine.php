@@ -70,7 +70,7 @@ error_reporting(E_ALL);
 
 	// Bugzilla severity to Redmine tracker map
 	$mapTrackerCritical = true;
-	$mapTrackerSupport = false;
+	$mapTrackerSupport = "Bug";
 
 	$issueTrackers = array(
 			"blocker"	=> "Critical",
@@ -83,7 +83,7 @@ error_reporting(E_ALL);
 			);
 
 	// Bugzilla status to Redmine status map
-	$mapStatusReopened = false;
+	$mapStatusReopened = "New";
 
 	$issueStatus = array(
 			"UNCONFIRMED"	=> "New",
