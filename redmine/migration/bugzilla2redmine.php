@@ -1,7 +1,6 @@
 <?php
-/* Modified by vitki on 2009-09-17 18:27 MSK */
-
 /****************************************************************
+ ** $Id$
  ** Contribution Name: Bugzilla to Redmine Migration Script
  ** Contribution Version: 1.0
  ** Author Name: Robert Heath
