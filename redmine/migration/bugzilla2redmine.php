@@ -168,16 +168,16 @@ error_reporting(E_ALL);
 		       value AS name 
 		   FROM versions";
 
-        $result = mysql_query($sql) or die(mysql_error().$sql);
-        while($row = mysql_fetch_array($result)) {
-                $versionNames[$row['project_id']][$row['name']] = $row['id'];
-                $version = new stdClass();
-                $version->id            = $row['id'];
-                $version->project_id	= $row['project_id'];
-                $version->name          = $row['name'];
+	$result = mysql_query($sql) or die(mysql_error().$sql);
+	while($row = mysql_fetch_array($result)) {
+		$versionNames[$row['project_id']][$row['name']] = $row['id'];
+		$version = new stdClass();
+		$version->id            = $row['id'];
+		$version->project_id	= $row['project_id'];
+		$version->name          = $row['name'];
 
-                $versions[$row['id']] = $version;
-        }
+		$versions[$row['id']] = $version;
+	}
 	
 	// Map Bugzilla User info to Redmine User info
 	$users = array();
@@ -188,7 +188,7 @@ error_reporting(E_ALL);
 	while($row = mysql_fetch_array($result)) {
 		$status = 1;
 		if (!empty($row['disabledtext'])) $status = 3;
-		
+
 		if (!empty($row['realname'])) {
 			$name = split(" ", $row['realname']);
 			$firstname	= $name[0];
@@ -197,7 +197,7 @@ error_reporting(E_ALL);
 			$firstname	= "";
 			$lastname	= "";
 		}
-		
+
 		$user = new stdClass();
 		$user->id		= $row['userid'];
 		$user->login 		= $row['login_name'];
@@ -222,17 +222,17 @@ error_reporting(E_ALL);
 		   FROM group_control_map, user_group_map
 		   WHERE group_control_map.group_id = user_group_map.group_id";
 
-        $result = mysql_query($sql) or die(mysql_error().$sql);
-        while($row = mysql_fetch_array($result)) {
-                $member = new stdClass();
-                $member->user_id        	= $row['user_id'];
-                $member->project_id		= $row['project_id'];
-                $member->role_id       		= "6";
-                $member->created_on	        = "2007-01-01 12:00:00";
-                $member->mail_notification	= "0";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
+	while($row = mysql_fetch_array($result)) {
+		$member = new stdClass();
+		$member->user_id        	= $row['user_id'];
+		$member->project_id		= $row['project_id'];
+		$member->role_id       		= "6";
+		$member->created_on	        = "2007-01-01 12:00:00";
+		$member->mail_notification	= "0";
 
-                $members[] = $member;
-        }
+		$members[] = $member;
+	}
 
 	// Map Bugzilla Components to Redmine Categories
 	$categories = array();
@@ -243,14 +243,14 @@ error_reporting(E_ALL);
 		  FROM components";
 
         $result = mysql_query($sql) or die(mysql_error().$sql);
-        while($row = mysql_fetch_array($result)) {
-                $category = new stdClass();
-                $category->id                   = $row['id'];
-                $category->project_id           = $row['project_id'];
-                $category->name                 = $row['name'];
-                $category->assigned_to_id	= $row['assigned_to_id'];
+	while($row = mysql_fetch_array($result)) {
+		$category = new stdClass();
+		$category->id                   = $row['id'];
+		$category->project_id           = $row['project_id'];
+		$category->name                 = $row['name'];
+		$category->assigned_to_id	= $row['assigned_to_id'];
 
-                $categories[$row['id']] = $category;
+		$categories[$row['id']] = $category;
 	}
 
 	// Map Bugzilla Bugs and Comments to Redmine Issues and Journals
@@ -306,12 +306,12 @@ error_reporting(E_ALL);
 			$issue->estimated_hours		= $row['estimated_time'];
 			$issue->due_date		= $duedate;
 			$issue->bug_priority		= $row['priority'];
-                        $issue->fixed_version_id        = $versionNames[$row['product_id']][$row['version']];
+			$issue->fixed_version_id        = $versionNames[$row['product_id']][$row['version']];
 			$issue->category_id		= $row['component_id'];
 			$issue->bug_severity		= $row['bug_severity'];
 			$issue->bug_status		= $row['bug_status'];
-                        $issue->whiteboard              = $row['whiteboard'];
-                        $issue->url               	= $row['url'];
+			$issue->whiteboard              = $row['whiteboard'];
+			$issue->url               	= $row['url'];
 
 			if (! array_key_exists($issue->bug_severity, $issueTrackers)) {
 				die("Cannot map bug severity '" . $issue->bug_severity
@@ -348,17 +348,17 @@ error_reporting(E_ALL);
 			$journal->user_id	 	= $row['who'];
 			$journal->notes	 		= $notes;
 			$journal->created_on		= $row['bug_when'];
-		
+
 			$journals[$row['comment_id']] 	= $journal;
 		}
-		
+
 		$bug_id = $row['bug_id'];
 	}
 
 	// Map Bugzilla CC to Redmine Watchers
-        $watchers = array();
+	$watchers = array();
 
-        $sql = "SELECT bug_id, who FROM cc";
+	$sql = "SELECT bug_id, who FROM cc";
 
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 	while($row = mysql_fetch_array($result)) {
@@ -370,33 +370,32 @@ error_reporting(E_ALL);
 		$watchers[] = $watcher;
 	}
 
-	
 	// Map Bugzilla Dependencies to Redmine Relations and Duplicates
 	$relations = array();
 
 	$sql = "SELECT blocked, dependson FROM dependencies";
 
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-        while($row = mysql_fetch_array($result)) {
-                $relation = new stdClass();
-                $relation->issue_from_id	= $row['blocked'];
-                $relation->issue_to_id		= $row['dependson'];
-                $relation->relation_type	= "blocks";
+	while($row = mysql_fetch_array($result)) {
+		$relation = new stdClass();
+		$relation->issue_from_id	= $row['blocked'];
+		$relation->issue_to_id		= $row['dependson'];
+		$relation->relation_type	= "blocks";
 
-                $relations[] = $relation;
-        }
+		$relations[] = $relation;
+	}
 
-        $sql = "SELECT dupe_of, dupe FROM duplicates";
+	$sql = "SELECT dupe_of, dupe FROM duplicates";
 
-        $result = mysql_query($sql) or die(mysql_error().$sql);
-        while($row = mysql_fetch_array($result)) {
-                $relation = new stdClass();
-                $relation->issue_from_id        = $row['dupe_of'];
-                $relation->issue_to_id          = $row['dupe'];
-                $relation->relation_type        = "duplicates";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
+	while($row = mysql_fetch_array($result)) {
+		$relation = new stdClass();
+		$relation->issue_from_id        = $row['dupe_of'];
+		$relation->issue_to_id          = $row['dupe'];
+		$relation->relation_type        = "duplicates";
 
-                $relations[] = $relation;
-        }
+		$relations[] = $relation;
+	}
 
 	// Map Bugzilla Attachments to Redmine Attachments
 	$attachments = array();
@@ -408,7 +407,7 @@ error_reporting(E_ALL);
 			attachments.submitter_id,
 			attachments.creation_ts,
 			attachments.description
-		   FROM attachments";
+		FROM attachments";
 
 	$result = mysql_query($sql) or die(mysql_error().$sql);	
 	while($row = mysql_fetch_array($result)) {
@@ -463,11 +462,11 @@ error_reporting(E_ALL);
 	// Connect to Redmine database
 	if ($shareDB) {
 		$link = mysql_connect($redmineDBHostname, $redmineDBUser, $redmineDBPassword);
-        	if (!$link) die('Could not connect: ' . mysql_error());
+		if (!$link) die('Could not connect: ' . mysql_error());
 	}
 
-        $db_selected = mysql_select_db($redmineDBName, $link);
-        if (!$db_selected) die ('Can\'t use ($redmineDBName : ' . mysql_error());
+	$db_selected = mysql_select_db($redmineDBName, $link);
+	if (!$db_selected) die ('Can\'t use ($redmineDBName : ' . mysql_error());
 
 	// Map bug severity to issue tracker
 
@@ -477,7 +476,7 @@ error_reporting(E_ALL);
 		// Fix tracker names
 		if ($tracker_name == "Support")
 			$tracker_name = $mapTrackerSupport;
-		if ($tracker_name == "Critical")
+		elseif ($tracker_name == "Critical")
 			$tracker_name = $mapTrackerCritical;
 		$sql = "SELECT id FROM trackers WHERE name = '" . $tracker_name ."'";
 		$result = mysql_query($sql) or die(mysql_error().$sql);
@@ -528,22 +527,22 @@ error_reporting(E_ALL);
 
 	// Create Redmine Project from Bugzilla Product
 	echo "Emptying Project tables.\n";
-	
+
 	$sql = "DELETE FROM projects";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
 	$sql = "DELETE FROM projects_trackers";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM enabled_modules";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
 	$sql = "DELETE FROM boards";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM custom_fields_projects";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-			
+
 	$sql = "DELETE FROM documents";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
@@ -554,31 +553,31 @@ error_reporting(E_ALL);
 
 	$sql = "DELETE FROM news";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM news";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM queries";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM repositories";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM time_entries";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM wiki_content_versions";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM wiki_contents";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM wiki_pages";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-	
+
 	$sql = "DELETE FROM wiki_redirects";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+
 	$sql = "DELETE FROM wikis";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
@@ -631,37 +630,37 @@ error_reporting(E_ALL);
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableTimeTracking) {
+			if ($enableTimeTracking) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'time_tracking')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableNews) {
+			if ($enableNews) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'news')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableDocuments) {
+			if ($enableDocuments) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'documents')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableFiles) {
+			if ($enableFiles) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'files')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableWiki) {
+			if ($enableWiki) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'wiki')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableRepository) {
+			if ($enableRepository) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'repository')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
 
-                        if ($enableBoards) {
+			if ($enableBoards) {
 				$sql = "INSERT INTO enabled_modules (project_id, name) VALUES (" . $project->id . ", 'boards')";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
@@ -669,21 +668,19 @@ error_reporting(E_ALL);
 	}
 
 	// Create Redmine Versions for Bugzilla Versions
-        echo "Emptying Versions tables.\n";
+	echo "Emptying Versions tables.\n";
 
-        $sql = "DELETE FROM versions";
-        $result = mysql_query($sql) or die(mysql_error().$sql);
+	$sql = "DELETE FROM versions";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-        echo count($versions) . " Versions to import.\n";
-        foreach ($versions as $version) {
-        	$sql = "INSERT INTO versions (id,
-                                              project_id,
-                                              name)
-                        	VALUES (" . $version->id . ",
-                                        " . $version->project_id . ",
-                                        '" . mysql_real_escape_string($version->name) . "')";
+	echo count($versions) . " Versions to import.\n";
+	foreach ($versions as $version) {
+		$sql = "INSERT INTO versions (id, project_id, name)
+				VALUES (" . $version->id . ",
+					" . $version->project_id . ",
+					'" . mysql_real_escape_string($version->name) . "')";
 
-                $result = mysql_query($sql) or die(mysql_error().$sql);
+		$result = mysql_query($sql) or die(mysql_error().$sql);
 	}
 
 	// Create Redmine User from Bugzilla User
@@ -697,7 +694,7 @@ error_reporting(E_ALL);
 
 	$sql = "DELETE FROM members";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
-		
+	
 	$sql = "DELETE FROM messages";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
@@ -747,15 +744,14 @@ error_reporting(E_ALL);
 						'" . $user->hashed_password . "',
 						" . $user->admin . ",
 						" . $user->status . ")";
-					
+
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 
-			$sql = "INSERT INTO user_preferences (user_id,
-							      others)
+			$sql = "INSERT INTO user_preferences (user_id, others)
 					VALUES (" . $user->id . ",
 						'--- \n:comments_sorting: asc\n:no_self_notified: true\n')";
 
-                        $result = mysql_query($sql) or die(mysql_error().$sql);
+			$result = mysql_query($sql) or die(mysql_error().$sql);
 		}
 	}
 	
@@ -768,8 +764,8 @@ error_reporting(E_ALL);
 	$sql = "DELETE FROM issue_relations";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-        $sql = "DELETE FROM custom_values";
-        $result = mysql_query($sql) or die(mysql_error().$sql);
+	$sql = "DELETE FROM custom_values";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 
 	echo count($issues) . " Issues to import.\n";
 	foreach ($issues as $key => $issue) {
@@ -778,8 +774,9 @@ error_reporting(E_ALL);
 		$sql = "SELECT * FROM issues WHERE id = " . $issue->id;
 
 		$result = mysql_query($sql) or die(mysql_error().$sql);	
-		if ($row = mysql_fetch_array($result)) $continue = false;
-			
+		if ($row = mysql_fetch_array($result))
+			$continue = false;
+	
 		if ($continue) {			
 			$sql = "INSERT INTO issues (id, 
 						    project_id, 
@@ -813,7 +810,7 @@ error_reporting(E_ALL);
                                                 '" . $issue->category_id . "',
 						" . $issue->tracker_id . ", 
 						" . $issue->status_id . ")";
-			
+
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 
 			if (!empty($issue->url)) {
@@ -831,85 +828,81 @@ error_reporting(E_ALL);
 		}
 	}
 
+	// Create Redmine Members from Bugzilla Groups
+	echo "Emptying Members tables.\n";
 
-        // Create Redmine Members from Bugzilla Groups
-        echo "Emptying Members tables.\n";
+	$sql = "DELETE FROM members";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-        $sql = "DELETE FROM members";
-        $result = mysql_query($sql) or die(mysql_error().$sql);
-
-        echo count($members) . " Members to import.\n";
-        foreach ($members as $key=>$member) {
-                $sql = "INSERT INTO members (user_id,
-                                             project_id,
-                                             role_id,
-                                             created_on,
+	echo count($members) . " Members to import.\n";
+	foreach ($members as $key=>$member) {
+		$sql = "INSERT INTO members (user_id,
+					     project_id,
+					     role_id,
+					     created_on,
 					     mail_notification)
 				VALUES (" . $member->user_id . ",
-                                        " . $member->project_id . ",
-                                        " . $member->role_id . ",
-                                        '" . $member->created_on . "',
+					" . $member->project_id . ",
+					" . $member->role_id . ",
+					'" . $member->created_on . "',
 					" . $member->mail_notification . ")";
 
-                $result = mysql_query($sql) or die(mysql_error().$sql);
-        }
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+	}
 
 	// Create Redmine Categories from Bugzilla Components
 	echo "Emptying Category tables.\n";
 
-        $sql = "DELETE FROM issue_categories";
-        $result = mysql_query($sql) or die(mysql_error().$sql);
+	$sql = "DELETE FROM issue_categories";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-        echo count($categories) . " Categories to import.\n";
-        foreach ($categories as $key=>$category) {
-        	$sql = "INSERT INTO issue_categories (id,
-                                                      project_id,
-                                                      name,
-                                                      assigned_to_id)
-                                VALUES (" . $category->id . ",
-                                        " . $category->project_id . ",
-                                        '" . mysql_real_escape_string($category->name) . "',
-                                        " . $category->assigned_to_id . ")";
+	echo count($categories) . " Categories to import.\n";
+	foreach ($categories as $key=>$category) {
+		$sql = "INSERT INTO issue_categories (id,
+						      project_id,
+						      name,
+						      assigned_to_id)
+				VALUES (" . $category->id . ",
+					" . $category->project_id . ",
+					'" . mysql_real_escape_string($category->name) . "',
+					" . $category->assigned_to_id . ")";
 
-                $result = mysql_query($sql) or die(mysql_error().$sql);
-        }
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+	}
 
-        // Create Redmine Watchers from Bugzilla CC
-        echo "Emptying Watchers tables.\n";
+	// Create Redmine Watchers from Bugzilla CC
+	echo "Emptying Watchers tables.\n";
 
-        $sql = "DELETE FROM watchers";
-        $result = mysql_query($sql) or die(mysql_error().$sql);
+	$sql = "DELETE FROM watchers";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-        echo count($watchers) . " Watchers to import.\n";
-        foreach ($watchers as $key=>$watcher) {
-                $sql = "INSERT INTO watchers (watchable_id,
-                                             user_id,
-                                             watchable_type)
-                                VALUES (" . $watcher->watchable_id . ",
-                                        " . $watcher->user_id . ",
-                                        '" . mysql_real_escape_string($watcher->watchable_type) . "')";
+	echo count($watchers) . " Watchers to import.\n";
+	foreach ($watchers as $key=>$watcher) {
+		$sql = "INSERT INTO watchers (watchable_id, user_id, watchable_type)
+				VALUES (" . $watcher->watchable_id . ",
+					" . $watcher->user_id . ",
+					'" . mysql_real_escape_string($watcher->watchable_type) . "')";
 
-                $result = mysql_query($sql) or die(mysql_error().$sql);
-        }
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+	}
 
+	// Create Redmine Relations from Bugzilla Dependencies and Duplicates
+	echo "Emptying Relations tables.\n";
 
-        // Create Redmine Relations from Bugzilla Dependencies and Duplicates
-        echo "Emptying Relations tables.\n";
+	$sql = "DELETE FROM issue_relations";
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-        $sql = "DELETE FROM issue_relations";
-        $result = mysql_query($sql) or die(mysql_error().$sql);
+	echo count($relations) . " Relations to import.\n";
+	foreach ($relations as $key=>$relation) {
+		$sql = "INSERT INTO issue_relations (issue_from_id,
+						     issue_to_id,
+						     relation_type)
+				VALUES (" . $relation->issue_from_id . ",
+					" . $relation->issue_to_id . ",
+					'" . mysql_real_escape_string($relation->relation_type) . "')";
 
-        echo count($relations) . " Relations to import.\n";
-        foreach ($relations as $key=>$relation) {
-                $sql = "INSERT INTO issue_relations (issue_from_id,
-                                                     issue_to_id,
-                                                     relation_type)
-                                VALUES (" . $relation->issue_from_id . ",
-                                        " . $relation->issue_to_id . ",
-                                        '" . mysql_real_escape_string($relation->relation_type) . "')";
-
-                $result = mysql_query($sql) or die(mysql_error().$sql);
-        }
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+	}
 
 	// Create Redmine Attachments from Bugzilla Attachments
 	echo "Emptying Attachment tables.\n";
@@ -927,7 +920,6 @@ error_reporting(E_ALL);
 		if ($row = mysql_fetch_array($result)) $continue = false;
 
 		if ($continue) {			
-			
 			$sql = "INSERT INTO attachments (id,
 							 container_id, 
 							 container_type, 
@@ -952,7 +944,7 @@ error_reporting(E_ALL);
 						'" . mysql_real_escape_string($attachment->author_id) . "', 
 						'" . mysql_real_escape_string($attachment->created_on) . "', 
 						'" . mysql_real_escape_string($attachment->description) . "')";
-					
+
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 		}
 	}	
@@ -987,7 +979,7 @@ error_reporting(E_ALL);
 						" . $journal->user_id . ", 
 						'" . mysql_real_escape_string($journal->notes) . "', 
 						'" . mysql_real_escape_string($journal->created_on) . "')";
-					
+
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 		}
 	}
