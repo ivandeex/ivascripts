@@ -61,16 +61,17 @@ error_reporting(E_ALL);
 
 	// Bugzilla priority to Redmine priority map
 	$issuePriorities = array(
-			"Utmost"	=> 7,
-			"High"		=> 6,
-			"Medium"	=> 4,
-			"Low"		=> 3,
-			"Optional"	=> 2
+			"Utmost"	=> "Urgent",
+			"High"		=> "High",
+			"Medium"	=> "Normal",
+			"Low"		=> "Low",
+			"Optional"	=> "Low"
 			);
 
 	// Bugzilla severity to Redmine tracker map
-	$useTrackerCritical = true;
-	$useTrackerSupport = true;
+	$mapTrackerCritical = true;
+	$mapTrackerSupport = false;
+
 	$issueTrackers = array(
 			"blocker"	=> "Critical",
 			"critical"	=> "Critical",
@@ -82,7 +83,8 @@ error_reporting(E_ALL);
 			);
 
 	// Bugzilla status to Redmine status map
-	$useStatusReopened = false;
+	$mapStatusReopened = false;
+
 	$issueStatus = array(
 			"UNCONFIRMED"	=> "New",
 			"NEW"		=> "New",
@@ -102,6 +104,21 @@ error_reporting(E_ALL);
 	$useQuestions = false;
 
 /***************** End Configuration Section ******************/
+
+	if ($mapTrackerSupport === true)
+		$mapTrackerSupport = "Support";
+	elseif ($mapTrackerSupport === false)
+		$mapTrackerSupport = "Bug";
+
+	if ($mapTrackerCritical === true)
+		$mapTrackerCritical = "Critical";
+	elseif ($mapTrackerCritical === false)
+		$mapTrackerSupport = "Bug";
+
+	if ($mapStatusReopened === true)
+		$mapStatusReopened = "Reopened";
+	elseif ($mapStatusReopened === false)
+		$mapStatusReopened = "New";
 
 	// Determine if the databases from Redmine and Bugzilla are on the same server
         $shareDB = true;
@@ -274,7 +291,7 @@ error_reporting(E_ALL);
 			$duedate = NULL;
 			if ($row['deadline'] != NULL && $row['deadline'] != "") 
 				$duedate = date("Y-m-d",strtotime($row['deadline']));
-			
+
 			$issue = new stdClass();
 			$issue->id			= $row['bug_id'];
 			$issue->project_id 		= $row['product_id'];
@@ -288,7 +305,7 @@ error_reporting(E_ALL);
 			$issue->start_date		= date("Y-m-d",strtotime($row['creation_ts']));
 			$issue->estimated_hours		= $row['estimated_time'];
 			$issue->due_date		= $duedate;
-			$issue->priority_id		= $issuePriorities[$row['priority']];
+			$issue->bug_priority		= $row['priority'];
                         $issue->fixed_version_id        = $versionNames[$row['product_id']][$row['version']];
 			$issue->category_id		= $row['component_id'];
 			$issue->bug_severity		= $row['bug_severity'];
@@ -302,6 +319,10 @@ error_reporting(E_ALL);
 			}
 			if (! array_key_exists($issue->bug_status, $issueStatus)) {
 				die("Cannot map bug status '" . $issue->bug_status
+					. "' for bug " . $issue->id . "\n");
+			}
+			if (! array_key_exists($issue->bug_priority, $issuePriorities)) {
+				die("Cannot map bug priority '" . $issue->bug_priority
 					. "' for bug " . $issue->id . "\n");
 			}
 
@@ -449,39 +470,52 @@ error_reporting(E_ALL);
         if (!$db_selected) die ('Can\'t use ($redmineDBName : ' . mysql_error());
 
 	// Map bug severity to issue tracker
+
 	$trackerIds = array();
 
 	foreach ($issueTrackers as $bug_severity => $tracker_name) {
 		// Fix tracker names
-		if ($tracker_name == "Support" && ! $useTrackerSupport)
-			$tracker_name = "Bug";
-		if ($tracker_name == "Critical" && ! $useTrackerCritical)
-			$tracker_name = "Bug";
+		if ($tracker_name == "Support")
+			$tracker_name = $mapTrackerSupport;
+		if ($tracker_name == "Critical")
+			$tracker_name = $mapTrackerCritical;
 		$sql = "SELECT id FROM trackers WHERE name = '" . $tracker_name ."'";
 		$result = mysql_query($sql) or die(mysql_error().$sql);
 		if ($row = mysql_fetch_array($result)) {
 			$tracker_id = $row['id'];
+			$issueTrackers[$bug_severity] = $tracker_id;
+			$trackerIds[$tracker_id] = $tracker_id;
 		} else {
 			die("Cannot find tracker '" . $tracker_name . "'\n");
 		}
-		$trackerIds[$tracker_id] = $tracker_id;
-		$issueTrackers[$bug_severity] = $tracker_id;
 	}
 
 	// Map bug status to issue status
 
 	foreach ($issueStatus as $bug_status => $status_name) {
 		// Fix status names
-		if ($status_name == "Reopened" && ! $useStatusReopened)
-			$status_name = "New";
+		if ($status_name == "Reopened")
+			$status_name = $mapStatusReopened;
 		$sql = "SELECT id FROM issue_statuses WHERE name = '" . $status_name ."'";
 		$result = mysql_query($sql) or die(mysql_error().$sql);
 		if ($row = mysql_fetch_array($result)) {
-			$status_id = $row['id'];
+			$issueStatus[$bug_status] = $row['id'];
 		} else {
 			die("Cannot find issue status '" . $status_name . "'\n");
 		}
-		$issueStatus[$bug_status] = $status_id;
+	}
+
+	// Map bugzilla bug priority to redmine issue priority
+
+	foreach ($issuePriorities as $bug_priority => $priority_name) {
+		$sql = "SELECT id FROM enumerations WHERE opt = 'IPRI'
+				AND name = '" . $priority_name ."'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		if ($row = mysql_fetch_array($result)) {
+			$issuePriorities[$bug_priority] = $row['id'];
+		} else {
+			die("Cannot find issue priority '" . $priority_name . "'\n");
+		}
 	}
 
 	// Finalize remaining mappings for issues
@@ -489,6 +523,7 @@ error_reporting(E_ALL);
 	foreach ($issues as $key => $issue) {
 		$issue->tracker_id = $issueTrackers[$issue->bug_severity];
 		$issue->status_id = $issueStatus[$issue->bug_status];
+		$issue->priority_id = $issuePriorities[$issue->bug_priority];
 	}
 
 	// Create Redmine Project from Bugzilla Product
