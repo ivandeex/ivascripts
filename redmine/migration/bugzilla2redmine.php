@@ -60,31 +60,38 @@ error_reporting(E_ALL);
 	$enableBoards = true;
 
 	// Bugzilla priority to Redmine priority map
-	$issuePriorities = array("Utmost"	=> 7,
-				"High"		=> 6,
-				"Medium"	=> 4,
-				"Low"		=> 3,
-				"Optional"	=> 2);
+	$issuePriorities = array(
+			"Utmost"	=> 7,
+			"High"		=> 6,
+			"Medium"	=> 4,
+			"Low"		=> 3,
+			"Optional"	=> 2
+			);
 
 	// Bugzilla severity to Redmine tracker map
 	$useTrackerCritical = true;
 	$useTrackerSupport = true;
-	$issueTrackers = array(	"blocker"     => "Critical",
-				"critical"    => "Critical",
-				"major"       => "Bug",
-				"normal"      => "Bug",
-				"minor"       => "Bug",
-				"trivial"     => "Support",
-				"enhancement" => "Feature");
+	$issueTrackers = array(
+			"blocker"	=> "Critical",
+			"critical"	=> "Critical",
+			"major"		=> "Bug",
+			"normal"	=> "Bug",
+			"minor"		=> "Bug",
+			"trivial"	=> "Support",
+			"enhancement"	=> "Feature"
+			);
 
 	// Bugzilla status to Redmine status map
-        $issueStatus = array(	"UNCONFIRMED"   => 1,
-				"NEW"           => 1,
-				"ASSIGNED"      => 2,
-				"REOPENED"      => 7,
-				"RESOLVED"      => 5,
-				"VERIFIED"      => 2,
-				"CLOSED"        => 5);
+	$useStatusReopened = false;
+	$issueStatus = array(
+			"UNCONFIRMED"	=> "New",
+			"NEW"		=> "New",
+			"ASSIGNED"	=> "Assigned",
+			"REOPENED"	=> "Reopened",
+			"RESOLVED"	=> "Closed",
+			"VERIFIED"	=> "Assigned",
+			"CLOSED"	=> "Closed"
+			);
 
 	$adminLoginPattern = "/^victor.semizarov@/";
 
@@ -285,12 +292,16 @@ error_reporting(E_ALL);
                         $issue->fixed_version_id        = $versionNames[$row['product_id']][$row['version']];
 			$issue->category_id		= $row['component_id'];
 			$issue->bug_severity		= $row['bug_severity'];
-			$issue->status_id		= $issueStatus[$row['bug_status']];
+			$issue->bug_status		= $row['bug_status'];
                         $issue->whiteboard              = $row['whiteboard'];
                         $issue->url               	= $row['url'];
 
 			if (! array_key_exists($issue->bug_severity, $issueTrackers)) {
 				die("Cannot map bug severity '" . $issue->bug_severity
+					. "' for bug " . $issue->id . "\n");
+			}
+			if (! array_key_exists($issue->bug_status, $issueStatus)) {
+				die("Cannot map bug status '" . $issue->bug_status
 					. "' for bug " . $issue->id . "\n");
 			}
 
@@ -303,9 +314,11 @@ error_reporting(E_ALL);
 			$issues[$row['bug_id']] = $issue;
 		} else {
 			$notes = $row['thetext'];
-			if ($row['isprivate'] == "1") 
+			if ($row['isprivate'] == "1") {
 				$notes = "*Private Comment:: " . 
-					 "See \"Bugzilla\":$bugzillaURL/show_bug.cgi?id=".$row['bug_id']." for more info*";
+					 "See \"Bugzilla\":$bugzillaURL/show_bug.cgi?id=" .
+					$row['bug_id'] . " for more info*";
+			}
 
 			$journal = new stdClass();
 			$journal->id			= $row['comment_id'];
@@ -407,19 +420,22 @@ error_reporting(E_ALL);
 		echo count($attachments) . " attachment files to migrate..";
 		foreach ($attachments as $key => $attachment) {
 
-			$sql2 = "SELECT attach_data.thedata FROM attach_data
+			$sql = "SELECT attach_data.thedata FROM attach_data
 				WHERE attach_data.id = " . $attachment->id;
-			$result2 = mysql_query($sql2) or die(mysql_error().$sql2);
-			while($row2 = mysql_fetch_array($result2)) {
-				$contents2 = $row2['thedata'];
-				$fp = fopen($attachment->redmine_filename, 'w') or die("can't open file");
-				if (fwrite($fp, $contents2) === FALSE)
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+			if ($row = mysql_fetch_array($result)) {
+				$contents = $row['thedata'];
+				$fp = fopen($attachment->redmine_filename, 'w')
+					or die("can't open file");
+				if (fwrite($fp, $contents) === FALSE)
 					echo "Cannot write to file ($filename)\n";
 				fclose($fp);
-				$attachments[$key]->filesize = filesize($attachment->redmine_filename);
+				$attachment->filesize = filesize($attachment->redmine_filename);
+			} else {
+				die("Cannot find contents of attachment " . $attachment->id . "\n");
 			}
 		}
-		$contents2 = "";
+		$contents = "";
 		echo "..done\n";
 	}
 
@@ -452,8 +468,27 @@ error_reporting(E_ALL);
 		$issueTrackers[$bug_severity] = $tracker_id;
 	}
 
+	// Map bug status to issue status
+
+	foreach ($issueStatus as $bug_status => $status_name) {
+		// Fix status names
+		if ($status_name == "Reopened" && ! $useStatusReopened)
+			$status_name = "New";
+		$sql = "SELECT id FROM issue_statuses WHERE name = '" . $status_name ."'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		if ($row = mysql_fetch_array($result)) {
+			$status_id = $row['id'];
+		} else {
+			die("Cannot find issue status '" . $status_name . "'\n");
+		}
+		$issueStatus[$bug_status] = $status_id;
+	}
+
+	// Finalize remaining mappings for issues
+
 	foreach ($issues as $key => $issue) {
 		$issue->tracker_id = $issueTrackers[$issue->bug_severity];
+		$issue->status_id = $issueStatus[$issue->bug_status];
 	}
 
 	// Create Redmine Project from Bugzilla Product
