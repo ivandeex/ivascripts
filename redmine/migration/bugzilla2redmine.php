@@ -1,6 +1,7 @@
 <?php
 /****************************************************************
  ** $Id$
+ **
  ** Contribution Name: Bugzilla to Redmine Migration Script
  ** Contribution Version: 1.0
  ** Author Name: Robert Heath
