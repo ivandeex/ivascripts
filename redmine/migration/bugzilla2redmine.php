@@ -31,10 +31,12 @@
  **
  ***************************************************************/
 
-// Report all PHP errors
+/* Report all PHP errors */
 error_reporting(E_ALL);
 
+/***************************************************************/
 /******************* Configuration Section *********************/
+/***************************************************************/
 
 	// Bugzilla installation info
 	$bugzillaDBHostname = "localhost";
@@ -115,13 +117,17 @@ error_reporting(E_ALL);
 	$useKeywords = true;
 	$useURLs = true;
 
-	$migrateAttachmentContents = true;
+	$dumpAttachments = true;
+	$attachmentOwner = "apache";
+	$attachmentGroup = "apache";
 
 	$useDeliverables = false;
 	$useNextIssues = false;
 	$useQuestions = false;
 
-/***************** End Configuration Section ******************/
+/***************************************************************/
+/****************** End Configuration Section ******************/
+/***************************************************************/
 
 	if ($mapTrackerSupport === true)
 		$mapTrackerSupport = "Support";
@@ -474,15 +480,15 @@ error_reporting(E_ALL);
 		$attachment->redmine_filename	= $redmineInstallPath . "/files/" . $disk_filename;
 		$attachment->filesize		= filesize($attachment->redmine_filename);
 
-		$attachments[$row['attach_id']] = $attachment;
+		$attachments[$attachment->id] = $attachment;
 	}
 
-	if ($migrateAttachmentContents) {
-		echo count($attachments) . " attachment files to migrate..";
-		foreach ($attachments as $key => $attachment) {
+	if ($dumpAttachments) {
+		echo count($attachments) . " attachment files to dump..";
+		$missing = array();
+		foreach ($attachments as $attachment_id => $attachment) {
 
-			$sql = "SELECT attach_data.thedata FROM attach_data
-				WHERE attach_data.id = " . $attachment->id;
+			$sql = "SELECT thedata FROM attach_data WHERE id = " . $attachment->id;
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 			if ($row = mysql_fetch_array($result)) {
 				$contents = $row['thedata'];
@@ -491,13 +497,22 @@ error_reporting(E_ALL);
 				if (fwrite($fp, $contents) === FALSE)
 					echo "Cannot write to file ($filename)\n";
 				fclose($fp);
+				chown($attachment->redmine_filename, $attachmentOwner);
+				chgrp($attachment->redmine_filename, $attachmentGroup);
 				$attachment->filesize = filesize($attachment->redmine_filename);
+				// remove flag of missing attachment if we are the replacement
+				unset($missing[$attachment->redmine_filename]);
 			} else {
-				die("Cannot find contents of attachment " . $attachment->id . "\n");
+				// probably this attachment was replaced by later revision
+				$missing[$attachment->redmine_filename] = $attachment_id;
 			}
 		}
 		$contents = "";
 		echo "..done\n";
+		foreach ($missing as $filename => $id)
+			echo "missing attachment id=$id $filename\n";
+		if (count($missing) > 0)
+			die("Cannot dump some attachments\n");
 	}
 
 	// Connect to Redmine database
