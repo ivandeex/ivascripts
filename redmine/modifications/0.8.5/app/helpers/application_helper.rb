@@ -468,7 +468,7 @@ module ApplicationHelper
       leading + (link || "#{prefix}#{sep}#{oid}")
     end
 
-    # Extended Issues/Changesets links
+    # Extended Issues/Changesets/Attachment links
     #
     # Examples:
     #   Issues:
@@ -477,45 +477,37 @@ module ApplicationHelper
     #   Changesets:
     #     commit 52 -> Link to revision 52
     #     checkin 52 -> Link to revision 52
+    #   Attachments:
+    #     attachment#52 -> Link to the attachment 52 of the current object
     #
-    text = text.gsub(%r{([\s\(,\-\>]|^)(!)?(bug|issue|commit|checkin)(#?\s+|\s*#)(\d+)(?=(?=[[:punct:]]\W)|,|\s|<|$)}) do |m|
+    text = text.gsub(%r{([\s\(,\-\>]|^)(!)?(bug|issue|commit|checkin|attachment)(#?\s+|\s*#)(\d+)(?=(?=[[:punct:]]\W)|,|\s|<|$)}) do |m|
       leading, esc, prefix, sep, oid = $1, $2, $3, $4, $5
       link = nil
       if esc.nil?
+        oid = oid.to_i
         if prefix == 'commit' || prefix == 'checkin'
           if project && (changeset = project.changesets.find_by_revision(oid))
-            link = link_to("r#{oid}", {:only_path => only_path, :controller => 'repositories', :action => 'revision',
+            link = link_to("#{prefix} r#{oid}", {:only_path => only_path, :controller => 'repositories', :action => 'revision',
                                        :id => project, :rev => oid},
                            :class => 'changeset',
                            :title => truncate_single_line(changeset.comments, 100))
           end
         elsif prefix == 'bug' || prefix == 'issue'
           if issue = Issue.find_by_id(oid, :include => [:project, :status], :conditions => Project.visible_by(User.current))
-            link = link_to("##{oid}", {:only_path => only_path, :controller => 'issues', :action => 'show', :id => oid},
+            link = link_to("#{prefix} ##{oid}", {:only_path => only_path, :controller => 'issues', :action => 'show', :id => oid},
                                       :class => (issue.closed? ? 'issue closed' : 'issue'),
                                       :title => "#{truncate(issue.subject, 100)} (#{issue.status.name})")
             link = content_tag('del', link) if issue.closed?
           end
+        elsif prefix == 'attachment'
+          if attachments && attachment = attachments.detect {|a| a.id == oid }
+            link = link_to_attachment(attachment, {:only_path => only_path, :class => 'attachment'})
+          else
+            link = "attachment ##{oid}"
+          end
         end
       end
       leading + (link || "#{prefix}#{sep}#{oid}")
-    end
-
-    # Extended Attachment links
-    #
-    # Examples:
-    #   Attachments:
-    #     attachment (id=52) -> Link to the attachment 52 of the current object
-    #
-    text = text.gsub(%r{([\s\(,\-\>]|^)(!)?(an\s+)?(attachment\s*\(\s*id\s*\=\s*)(\d+)(\s*\))}) do |m|
-      leading, esc, article, prefix, oid, suffix = $1, $2, $3, $4, $5, $6
-      link = nil
-      if esc.nil?
-            if attachments && attachment = attachments.detect {|a| a.id == oid.to_i }
-              link = link_to_attachment(attachment, {:only_path => only_path, :class => 'attachment'})
-            end
-      end
-      leading + (link || "#{article}#{prefix}#{oid}#{suffix}")
     end
 
     text
