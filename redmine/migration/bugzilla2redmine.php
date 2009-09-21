@@ -115,7 +115,7 @@ error_reporting(E_ALL);
 	$useKeywords = true;
 	$useURLs = true;
 
-	$migrateAttachmentContents = false;
+	$migrateAttachmentContents = true;
 
 	$useDeliverables = false;
 	$useNextIssues = false;
