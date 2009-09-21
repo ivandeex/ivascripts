@@ -101,6 +101,7 @@ error_reporting(E_ALL);
 
 	$adminLoginPattern = "/^victor.semizarov@/";
 
+	$useKeywords = true;
 	$migrateAttachmentContents = false;
 
 	$useDeliverables = false;
@@ -246,7 +247,7 @@ error_reporting(E_ALL);
 		       initialowner as assigned_to_id 
 		  FROM components";
 
-        $result = mysql_query($sql) or die(mysql_error().$sql);
+	$result = mysql_query($sql) or die(mysql_error().$sql);
 	while($row = mysql_fetch_array($result)) {
 		$category = new stdClass();
 		$category->id                   = $row['id'];
@@ -346,6 +347,36 @@ error_reporting(E_ALL);
 		}
 
 		$bug_id = $row['bug_id'];
+	}
+
+	// Map Keywords
+	$keywordDefs = array();
+	if ($useKeywords) {
+
+		$sql = "SELECT id, name FROM keyworddefs";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		while($row = mysql_fetch_array($result)) {
+			$keywordDefs[$row['id']] = $row['name'];
+		}
+
+		$keywordVals = array_values($keywordDefs);
+		sort($keywordVals);
+		foreach ($keywordVals as &$kw) {
+			$kw .= ",?";
+		}
+		$keywordPattern = "/^" . implode('|', $keywordVals) . "$/";
+
+		foreach ($issues as $bug_id => $issue) {
+			$keywords = array();
+			$sql = "SELECT keywordid FROM keywords WHERE bug_id = " . $issue->id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+			while($row = mysql_fetch_array($result)) {
+				$keywords[] = $keywordDefs[ $row['keywordid'] ];
+			}
+			sort($keywords);
+			$issue->keyword_array = $keywords;
+			$issue->keyword_line = implode(',', $keywords);
+		}
 	}
 
 	// Map Bugzilla CC to Redmine Watchers
@@ -588,6 +619,25 @@ error_reporting(E_ALL);
 
 	$sql = "DELETE FROM wikis";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
+
+	if ($useKeywords) {
+		$sql = "DELETE FROM custom_fields where type = 'IssueCustomField' AND name = 'Keywords'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+
+		$sql = "INSERT INTO custom_fields (type, name, field_format, regexp,
+					is_required, is_for_all, is_filter, searchable)
+				VALUES ('IssueCustomField', 'Keywords', 'string',
+					'" . mysql_real_escape_string($keywordPattern) . "',
+					0, 1, 1, 1)";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+
+		$sql = "SELECT id FROM custom_fields where type = 'IssueCustomField' AND name = 'Keywords'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		if ($row = mysql_fetch_array($result))
+			$keywords_field_id = $row['id'];
+		else
+			die("Failed to insert the Keywords field definition\n");
+	}
 
 	echo count($projects) . " Projects to import.\n";
 	foreach ($projects as $key => $project) {
