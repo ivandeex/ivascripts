@@ -8,6 +8,7 @@
  ** Author Name: Robert Heath
  ** Author E-Mail Address: robert@robertheath.net
  ** Author Website: www.robertheath.net
+ ** Modified by: ivandeex@gmail.com
  **
  ** !!! IMPORTANT !!!
  ** Executing this script will clean out your Redmine database! Only
