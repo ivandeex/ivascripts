@@ -41,7 +41,7 @@ error_reporting(E_ALL);
 	$bugzillaDBUser = "bugs";
 	$bugzillaDBPassword = "bugs";
 	$bugzillaDBName = "bugs";
-	$bugzillaURL = "http://bugzilla.ourdom.com/bugzilla";
+	$bugzillaURL = "http://bugzilla.ourdom.com/bugzilla/show_bug.cgi?id=";
 
 	// Redmine installation info
 	$redmineDBHostname = "localhost";
@@ -96,12 +96,18 @@ error_reporting(E_ALL);
 			"CLOSED"	=> "Closed"
 			);
 
+	// Replacement patterns
+	$replacements = array(
+		);
+
 	// More settings
 	$defaultDueDate = "2012-01-01";
 
-	$adminLoginPattern = "/^victor.semizarov@/";
+	$adminLoginPattern = "/victor/";
 
 	$useKeywords = true;
+	$useURLs = true;
+
 	$migrateAttachmentContents = false;
 
 	$useDeliverables = false;
@@ -293,6 +299,8 @@ error_reporting(E_ALL);
 	$result = mysql_query($sql) or die(mysql_error().$sql);	
 	while($row = mysql_fetch_array($result)) {
 		if ($row['bug_id'] != $bug_id) {
+			// New bug
+
 			$duedate = NULL;
 			if ($row['deadline'] != NULL && $row['deadline'] != "") 
 				$duedate = date("Y-m-d",strtotime($row['deadline']));
@@ -320,19 +328,27 @@ error_reporting(E_ALL);
 			$issue->whiteboard              = $row['whiteboard'];
 			$issue->url               	= $row['url'];
 
-			$sql2 = "SELECT * FROM bug_group_map WHERE bug_id = " . $row['bug_id']
+			$sql2 = "SELECT * FROM bug_group_map WHERE bug_id = " . $issue->id
 				. " AND (group_id = 14 OR group_id = 21)";
 			$result2 = mysql_query($sql2) or die(mysql_error().$sql2);
-			
+
 			if ($row2 = mysql_fetch_array($result2)) $issue->private = "1";
 		
 			$issues[$row['bug_id']] = $issue;
+
 		} else {
+			// New comment
+
 			$notes = $row['thetext'];
 			if ($row['isprivate'] == "1") {
-				$notes = "*Private Comment:: " . 
-					 "See \"Bugzilla\":$bugzillaURL/show_bug.cgi?id=" .
-					$row['bug_id'] . " for more info*";
+				$notes = "*Private Comment::See \"Bugzilla\":" .
+					$bugzillaURL . $row['bug_id'] . " for more info*";
+			} else {
+				$notes0 = $notes;
+				$notes = preg_replace(array_keys($replacements),
+						array_values($replacements), $notes);
+				if ($notes0 != $notes)
+					echo "replaced: $notes0\n$notes\n====\n";
 			}
 
 			$journal = new stdClass();
@@ -351,31 +367,25 @@ error_reporting(E_ALL);
 
 	// Map Keywords
 	$keywordDefs = array();
+	$keywordVals = array();
 	if ($useKeywords) {
 
-		$sql = "SELECT id, name FROM keyworddefs";
+		$sql = "SELECT id, name FROM keyworddefs ORDER BY name";
 		$result = mysql_query($sql) or die(mysql_error().$sql);
 		while($row = mysql_fetch_array($result)) {
 			$keywordDefs[$row['id']] = $row['name'];
+			$keywordVals[] = $row['name'] . ',?';
 		}
-
-		$keywordVals = array_values($keywordDefs);
-		sort($keywordVals);
-		foreach ($keywordVals as &$kw) {
-			$kw .= ",?";
-		}
-		$keywordPattern = "/^" . implode('|', $keywordVals) . "$/";
 
 		foreach ($issues as $bug_id => $issue) {
 			$keywords = array();
-			$sql = "SELECT keywordid FROM keywords WHERE bug_id = " . $issue->id;
+			$sql = "SELECT name FROM keyworddefs, keywords WHERE id = keywordid
+				AND bug_id = " . $bug_id . " ORDER BY name";
 			$result = mysql_query($sql) or die(mysql_error().$sql);
-			while($row = mysql_fetch_array($result)) {
-				$keywords[] = $keywordDefs[ $row['keywordid'] ];
+			while ($row = mysql_fetch_array($result)) {
+				$keywords[] = $row['name'];
 			}
-			sort($keywords);
-			$issue->keyword_array = $keywords;
-			$issue->keyword_line = implode(',', $keywords);
+			$issue->keywords = implode(',', $keywords);
 		}
 	}
 
@@ -494,7 +504,7 @@ error_reporting(E_ALL);
 
 	// Map bug severity to issue tracker
 
-	$trackerIds = array();
+	$trackersIds = array();
 
 	foreach ($issueTrackers as $bug_severity => $tracker_name) {
 		// Fix tracker names
@@ -507,7 +517,7 @@ error_reporting(E_ALL);
 		if ($row = mysql_fetch_array($result)) {
 			$tracker_id = $row['id'];
 			$issueTrackers[$bug_severity] = $tracker_id;
-			$trackerIds[$tracker_id] = $tracker_id;
+			$trackersIds[] = $tracker_id;
 		} else {
 			die("Cannot find tracker '" . $tracker_name . "'\n");
 		}
@@ -620,23 +630,78 @@ error_reporting(E_ALL);
 	$sql = "DELETE FROM wikis";
 	$result = mysql_query($sql) or die(mysql_error().$sql);
 
-	if ($useKeywords) {
-		$sql = "DELETE FROM custom_fields where type = 'IssueCustomField' AND name = 'Keywords'";
+	// Re-create custom URL field
+	if ($useURLs) {
+		$sql = "SELECT id FROM custom_fields WHERE type = 'IssueCustomField' AND name = 'URL'";
 		$result = mysql_query($sql) or die(mysql_error().$sql);
-
-		$sql = "INSERT INTO custom_fields (type, name, field_format, regexp,
-					is_required, is_for_all, is_filter, searchable)
-				VALUES ('IssueCustomField', 'Keywords', 'string',
-					'" . mysql_real_escape_string($keywordPattern) . "',
-					0, 1, 1, 1)";
-		$result = mysql_query($sql) or die(mysql_error().$sql);
-
-		$sql = "SELECT id FROM custom_fields where type = 'IssueCustomField' AND name = 'Keywords'";
-		$result = mysql_query($sql) or die(mysql_error().$sql);
-		if ($row = mysql_fetch_array($result))
+		if ($row = mysql_fetch_array($result)) {
 			$keywords_field_id = $row['id'];
-		else
-			die("Failed to insert the Keywords field definition\n");
+
+			$sql = "DELETE FROM custom_values WHERE custom_field_id = " . $keywords_field_id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+
+			$sql = "DELETE FROM custom_fields_trackers WHERE custom_field_id = " . $keywords_field_id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+
+			$sql = "DELETE FROM custom_fields WHERE id = " . $keywords_field_id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+		}
+
+		$sql = "INSERT INTO custom_fields (type, name, field_format, "
+			. " is_required, is_for_all, is_filter, searchable)"
+			. " VALUES ('IssueCustomField', 'URL', 'text', 0, 1, 0, 0)";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+
+		$sql = "SELECT id FROM custom_fields WHERE type = 'IssueCustomField' AND name = 'URL'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		$row = mysql_fetch_array($result)
+			or die("Failed to insert the Keywords field definition\n");
+		$url_field_id = $row['id'];
+
+		foreach ($trackersIds as $tracker_id) {
+			$sql = "INSERT INTO custom_fields_trackers (custom_field_id, tracker_id) "
+				. "VALUES ( " . $url_field_id . ", " . $tracker_id . ")";
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+		}
+	}
+
+	// Re-create custom Keywords field
+	if ($useKeywords) {
+		$sql = "SELECT id FROM custom_fields WHERE type = 'IssueCustomField' AND name = 'Keywords'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		if ($row = mysql_fetch_array($result)) {
+			$keywords_field_id = $row['id'];
+
+			$sql = "DELETE FROM custom_values WHERE custom_field_id = " . $keywords_field_id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+
+			$sql = "DELETE FROM custom_fields_trackers WHERE custom_field_id = " . $keywords_field_id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+
+			$sql = "DELETE FROM custom_fields WHERE id = " . $keywords_field_id;
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+		}
+
+		$keywordsPattern = '^(' . implode('|', $keywordVals) . ')+$';
+
+		$sql = "INSERT INTO custom_fields (type, name, field_format, `regexp`,"
+				. " is_required, is_for_all, is_filter, searchable)"
+				. " VALUES ('IssueCustomField', 'Keywords', 'text', "
+				. "'" . mysql_real_escape_string($keywordsPattern) . "',"
+				. " 0, 1, 1, 1)";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+
+		$sql = "SELECT id FROM custom_fields WHERE type = 'IssueCustomField' AND name = 'Keywords'";
+		$result = mysql_query($sql) or die(mysql_error().$sql);
+		$row = mysql_fetch_array($result)
+			or die("Failed to insert the Keywords field definition\n");
+		$keywords_field_id = $row['id'];
+
+		foreach ($trackersIds as $tracker_id) {
+			$sql = "INSERT INTO custom_fields_trackers (custom_field_id, tracker_id) "
+				. "VALUES ( " . $keywords_field_id . ", " . $tracker_id . ")";
+			$result = mysql_query($sql) or die(mysql_error().$sql);
+		}
 	}
 
 	echo count($projects) . " Projects to import.\n";
@@ -676,7 +741,7 @@ error_reporting(E_ALL);
 					
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 
-			foreach ($trackerIds as $key => $tracker_id) {
+			foreach ($trackersIds as $tracker_id) {
 				$sql = "INSERT INTO projects_trackers (project_id, tracker_id)
 					VALUES (" . $project->id . ", " . $tracker_id . ")";
 				$result = mysql_query($sql) or die(mysql_error().$sql);
@@ -871,15 +936,28 @@ error_reporting(E_ALL);
 
 			$result = mysql_query($sql) or die(mysql_error().$sql);
 
-			if (!empty($issue->url)) {
+			if ($useURLs && !empty($issue->url)) {
 				$sql = "INSERT INTO custom_values (customized_type,
 								   customized_id,
 								   custom_field_id,
 								   value)
-						VALUES ('Issue',
-							" . $issue->id . ",
-							2,
-							'" . mysql_real_escape_string($issue->url) . "')";
+					VALUES ('Issue',
+						" . $issue->id . ",
+						" . $url_field_id . ",
+						'" . mysql_real_escape_string($issue->url) . "')";
+
+				$result = mysql_query($sql) or die(mysql_error().$sql);
+			}
+
+			if ($useKeywords && !empty($issue->keywords)) {
+				$sql = "INSERT INTO custom_values (customized_type,
+								   customized_id,
+								   custom_field_id,
+								   value)
+					VALUES ('Issue',
+						" . $issue->id . ",
+						" . $keywords_field_id . ",
+						'" . mysql_real_escape_string($issue->keywords) . "')";
 
 				$result = mysql_query($sql) or die(mysql_error().$sql);
 			}
