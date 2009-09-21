@@ -98,6 +98,7 @@ error_reporting(E_ALL);
 
 	// Replacement patterns
 	$replacements = array(
+		'@http://[\d\.]+/bugzilla/show_bug\.cgi\?id=(\d+)@' => '#\\1',
 		);
 
 	// More settings
@@ -348,7 +349,7 @@ error_reporting(E_ALL);
 				$notes = preg_replace(array_keys($replacements),
 						array_values($replacements), $notes);
 				if ($notes0 != $notes)
-					echo "replaced: $notes0\n$notes\n====\n";
+					echo "replaced: <<< $notes0\n>>> $notes\n====\n";
 			}
 
 			$journal = new stdClass();
