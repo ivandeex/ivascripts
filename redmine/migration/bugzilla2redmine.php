@@ -98,7 +98,13 @@ error_reporting(E_ALL);
 
 	// Replacement patterns
 	$replacements = array(
-		'@http://[\d\.]+/bugzilla/show_bug\.cgi\?id=(\d+)@' => '#\\1',
+		'@\bhttp://([\d\.]+)/bugzilla/show_bug\.cgi\?id=(\d+)\b@' => '#\\2',
+		'@\b(attachment\s+)?http://([\d\.]+)/bugzilla/attachment\.cgi\?id=(\d+)(&action=\w+)?\b@' => 'attachment#\\3',
+		'@\b(bug|issue)(#?\s*|\s+#)?(\d+)\b@' => '\\1 #\\3',
+		'@\b(commit|checkin)(#?\s*|\s+#)?(\d+)\b@' => '\\1 r\\3',
+		'@\b(attachment)(#?\s*|\s+#)?(\d+)\b@' => '\\1#\\3',
+		'@\b(an\s+)?attachment\s*\(\s*id\s*=\s*(\d+)\s*\)@' => 'attachment#\\2',
+		'@(?<!bug|issue|commit|checkin|attachment)(\s*)(#\s*\d+)\b@' => '\\1!\\2',
 		);
 
 	// More settings
@@ -308,11 +314,14 @@ error_reporting(E_ALL);
 			elseif ($defaultDueDate != NULL && $defaultDueDate != "")
 				$duedate = date("Y-m-d",strtotime($defaultDueDate));
 
+			$notes = preg_replace(array_keys($replacements),
+					array_values($replacements), $row['thetext']);
+
 			$issue = new stdClass();
 			$issue->id			= $row['bug_id'];
 			$issue->project_id 		= $row['product_id'];
 			$issue->subject			= $row['short_desc'];
-			$issue->description		= $row['thetext'];
+			$issue->description		= $notes;
 			$issue->assigned_to_id		= $row['assigned_to'];
 			$issue->author_id		= $row['reporter'];
 			$issue->created_on		= $row['creation_ts'];
@@ -340,16 +349,12 @@ error_reporting(E_ALL);
 		} else {
 			// New comment
 
-			$notes = $row['thetext'];
 			if ($row['isprivate'] == "1") {
 				$notes = "*Private Comment::See \"Bugzilla\":" .
 					$bugzillaURL . $row['bug_id'] . " for more info*";
 			} else {
-				$notes0 = $notes;
 				$notes = preg_replace(array_keys($replacements),
-						array_values($replacements), $notes);
-				if ($notes0 != $notes)
-					echo "replaced: <<< $notes0\n>>> $notes\n====\n";
+						array_values($replacements), $row['thetext']);
 			}
 
 			$journal = new stdClass();
@@ -369,6 +374,7 @@ error_reporting(E_ALL);
 	// Map Keywords
 	$keywordDefs = array();
 	$keywordVals = array();
+
 	if ($useKeywords) {
 
 		$sql = "SELECT id, name FROM keyworddefs ORDER BY name";
