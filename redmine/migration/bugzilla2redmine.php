@@ -68,6 +68,7 @@ error_reporting(E_ALL);
 			"Utmost"	=> "Urgent",
 			"High"		=> "High",
 			"Medium"	=> "Normal",
+			"Normal"	=> "Normal",
 			"Low"		=> "Low",
 			"Optional"	=> "Low"
 			);
@@ -113,7 +114,7 @@ error_reporting(E_ALL);
 	// More settings
 	$defaultDueDate = "2012-01-01";
 
-	$adminLoginPattern = "/victor/";
+	$adminLoginPattern = "/victor|vandreev/";
 
 	$useKeywords = true;
 	$useURLs = true;
@@ -234,8 +235,7 @@ error_reporting(E_ALL);
 		$user->status		= $status;
 		$user->admin		= preg_match($adminLoginPattern, $user->login);
 		$user->hashed_password = sha1($user->login); // PASSWORD EQUAL TO LOGIN NAME
-		if ($user->admin == 1)
-			echo $user->login . " becomes administrator\n";
+		echo $user->login . " is " . ($user->admin ? "administrator" : "normal user"). "\n";
 
 		$users[$row['userid']] = $user;
 	}
@@ -479,7 +479,7 @@ error_reporting(E_ALL);
 
 		$attachment->disk_filename	= $disk_filename;
 		$attachment->redmine_filename	= $redmineInstallPath . "/files/" . $disk_filename;
-		$attachment->filesize		= filesize($attachment->redmine_filename);
+		$attachment->filesize		= 0;
 
 		$attachments[$attachment->id] = $attachment;
 	}
